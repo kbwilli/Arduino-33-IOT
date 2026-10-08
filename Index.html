@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Karl Servo Control</title>
+
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #111827;
+      color: #f9fafb;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .panel {
+      width: min(760px, 100%);
+      margin: auto;
+      padding: 24px;
+    }
+
+    h1 {
+      margin-top: 0;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      color: #cbd5e1;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      padding: 18px;
+      margin: 18px 0;
+      border-radius: 14px;
+      background: #1f2937;
+    }
+
+    .status {
+      padding: 22px;
+      margin: 18px 0;
+      border-radius: 14px;
+      text-align: center;
+      font-size: 1.7rem;
+      font-weight: bold;
+      background: #374151;
+    }
+
+    .armed {
+      background: #b91c1c;
+    }
+
+    .not-armed {
+      background: #15803d;
+    }
+
+    button {
+      width: 100%;
+      padding: 16px;
+      margin: 8px 0;
+      border: none;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      font-size: 1.1rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #4b5563;
+      color: #cbd5e1;
+      cursor: default;
+    }
+
+    .setpoints {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 1rem;
+    }
+
+    input[type="number"],
+    select {
+      width: 100%;
+      padding: 13px;
+      margin-top: 7px;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      background: #0f172a;
+      color: white;
+      font-size: 1.05rem;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      margin: 22px 0 10px;
+      accent-color: #3b82f6;
+    }
+
+    input[type="range"]:disabled {
+      opacity: 0.45;
+    }
+
+    .angle {
+      margin: 10px 0;
+      text-align: center;
+      font-size: 3.4rem;
+      font-weight: bold;
+    }
+
+    .direction {
+      display: flex;
+      justify-content: space-between;
+      color: #d1d5db;
+      font-size: 0.95rem;
+    }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      font-size: 1.1rem;
+    }
+
+    .switch-row input {
+      width: 26px;
+      height: 26px;
+    }
+
+    .state-note {
+      min-height: 44px;
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #cbd5e1;
+    }
+
+    .warning {
+      color: #fbbf24;
+    }
+
+    @media (max-width: 520px) {
+      .panel {
+        padding: 16px;
+      }
+
+      .setpoints {
+        grid-template-columns: 1fr;
+      }
+
+      .direction {
+        font-size: 0.8rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="panel">
+    <h1>Servo Control</h1>
+
+    <div class="subtitle">
+      Move the slider right for an increasing commanded angle.
+    </div>
+
+    <button id="connectButton">
+      Connect to Servo
+    </button>
+
+    <div id="status" class="status">
+      DISCONNECTED
+    </div>
+
+    <section class="card">
+      <h2>Angle limits</h2>
+
+      <div class="setpoints">
+        <label>
+          Minimum angle
+          <input
+            id="minimum"
+            type="number"
+            min="0"
+            max="179"
+            value="20"
+            disabled
+          >
+        </label>
+
+        <label>
+          Maximum angle
+          <input
+            id="maximum"
+            type="number"
+            min="1"
+            max="180"
+            value="160"
+            disabled
+          >
+        </label>
+      </div>
+
+      <button id="applyButton" disabled>
+        Apply Setpoints
+      </button>
+    </section>
+
+    <section class="card">
+      <h2>Position</h2>
+
+      <div id="angleDisplay" class="angle">
+        90°
+      </div>
+
+      <input
+        id="servoSlider"
+        type="range"
+        min="20"
+        max="160"
+        value="90"
+        step="1"
+        disabled
+      >
+
+      <div class="direction">
+        <span>Minimum</span>
+        <span>Increasing angle →</span>
+        <span>Maximum</span>
+      </div>
+
+      <p>
+        The matrix follows this slider whether the mechanism is
+        ARMED or NOT ARMED.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Servo movement</h2>
+
+      <label class="switch-row">
+        <input
+          id="smoothEnabled"
+          type="checkbox"
+          checked
+          disabled
+        >
+        Smooth servo movement
+      </label>
+
+      <label>
+        Smooth movement speed
+        <select id="smoothSpeed" disabled>
+          <option value="30">Slow</option>
+          <option value="15" selected>Medium</option>
+          <option value="7">Fast</option>
+        </select>
+      </label>
+    </section>
+
+    <div id="message" class="state-note">
+      Press Connect to begin.
+    </div>
+  </main>
+
+  <script>
+    // ========================================================
+    // BLE UUIDs
+    // ========================================================
+
+    const SERVICE_UUID =
+      "9f8a0001-7c44-4b28-a6f1-7a65d93cf001";
+
+    const ANGLE_UUID =
+      "9f8a0002-7c44-4b28-a6f1-7a65d93cf001";
+
+    const MINIMUM_UUID =
+      "9f8a0003-7c44-4b28-a6f1-7a65d93cf001";
+
+    const MAXIMUM_UUID =
+      "9f8a0004-7c44-4b28-a6f1-7a65d93cf001";
+
+    const ARMED_UUID =
+      "9f8a0005-7c44-4b28-a6f1-7a65d93cf001";
+
+    const SMOOTH_ENABLED_UUID =
+      "9f8a0006-7c44-4b28-a6f1-7a65d93cf001";
+
+    const SMOOTH_INTERVAL_UUID =
+      "9f8a0007-7c44-4b28-a6f1-7a65d93cf001";
+
+    // ========================================================
+    // BLE objects
+    // ========================================================
+
+    let device;
+    let angleCharacteristic;
+    let minimumCharacteristic;
+    let maximumCharacteristic;
+    let armedCharacteristic;
+    let smoothEnabledCharacteristic;
+    let smoothIntervalCharacteristic;
+
+    let connected = false;
+    let armed = false;
+
+    // Prevent overlapping slider writes.
+    let pendingAngle = null;
+    let angleWriteInProgress = false;
+
+    // ========================================================
+    // Page elements
+    // ========================================================
+
+    const connectButton =
+      document.getElementById("connectButton");
+
+    const applyButton =
+      document.getElementById("applyButton");
+
+    const statusBox =
+      document.getElementById("status");
+
+    const minimumInput =
+      document.getElementById("minimum");
+
+    const maximumInput =
+      document.getElementById("maximum");
+
+    const slider =
+      document.getElementById("servoSlider");
+
+    const angleDisplay =
+      document.getElementById("angleDisplay");
+
+    const smoothEnabledInput =
+      document.getElementById("smoothEnabled");
+
+    const smoothSpeedSelect =
+      document.getElementById("smoothSpeed");
+
+    const message =
+      document.getElementById("message");
+
+    // ========================================================
+    // BLE value conversion
+    // ========================================================
+
+    function uint16Buffer(number) {
+      const buffer = new ArrayBuffer(2);
+      const view = new DataView(buffer);
+
+      view.setUint16(0, number, true);
+      return buffer;
+    }
+
+    function readUint16(dataView) {
+      return dataView.getUint16(0, true);
+    }
+
+    async function writeUint16(characteristic, number) {
+      await characteristic.writeValue(
+        uint16Buffer(number)
+      );
+    }
+
+    // ========================================================
+    // UI state
+    // ========================================================
+
+    function setConnectedControls(enabled) {
+      slider.disabled = !enabled;
+      minimumInput.disabled = !enabled;
+      maximumInput.disabled = !enabled;
+      applyButton.disabled = !enabled;
+      smoothEnabledInput.disabled = !enabled;
+
+      smoothSpeedSelect.disabled =
+        !enabled || !smoothEnabledInput.checked;
+    }
+
+    function showArmedState(newArmedState) {
+      armed = newArmedState;
+
+      if (armed) {
+        statusBox.textContent = "ARMED";
+        statusBox.className = "status armed";
+
+        message.textContent =
+          "Servo and matrix will follow the slider.";
+      } else {
+        statusBox.textContent = "NOT ARMED";
+        statusBox.className = "status not-armed";
+
+        message.textContent =
+          "The matrix will follow the slider. " +
+          "The servo will remain stationary.";
+      }
+
+      // Slider remains available in both operating states.
+      slider.disabled = !connected;
+    }
+
+    function showDisconnectedState() {
+      connected = false;
+      armed = false;
+
+      statusBox.textContent = "DISCONNECTED";
+      statusBox.className = "status";
+
+      connectButton.textContent = "Reconnect";
+      setConnectedControls(false);
+
+      message.textContent =
+        "Bluetooth connection is disconnected.";
+    }
+
+    // ========================================================
+    // BLE notifications
+    // ========================================================
+
+    function handleArmedNotification(event) {
+      const newState =
+        event.target.value.getUint8(0) === 1;
+
+      showArmedState(newState);
+    }
+
+    function handleAngleNotification(event) {
+      const angle = readUint16(
+        event.target.value
+      );
+
+      slider.value = angle;
+      angleDisplay.textContent = angle + "°";
+    }
+
+    // ========================================================
+    // Connect
+    // ========================================================
+
+    async function connect() {
+      if (!navigator.bluetooth) {
+        message.textContent =
+          "Web Bluetooth is not available in this browser.";
+
+        return;
+      }
+
+      try {
+        message.textContent =
+          "Select Karl-Servo-Control from the device list.";
+
+        device = await navigator.bluetooth.requestDevice({
+          filters: [
+            {
+              name: "Karl-Servo-Control"
+            }
+          ],
+          optionalServices: [
+            SERVICE_UUID
+          ]
+        });
+
+        device.addEventListener(
+          "gattserverdisconnected",
+          showDisconnectedState
+        );
+
+        const server =
+          await device.gatt.connect();
+
+        const service =
+          await server.getPrimaryService(SERVICE_UUID);
+
+        angleCharacteristic =
+          await service.getCharacteristic(
+            ANGLE_UUID
+          );
+
+        minimumCharacteristic =
+          await service.getCharacteristic(
+            MINIMUM_UUID
+          );
+
+        maximumCharacteristic =
+          await service.getCharacteristic(
+            MAXIMUM_UUID
+          );
+
+        armedCharacteristic =
+          await service.getCharacteristic(
+            ARMED_UUID
+          );
+
+        smoothEnabledCharacteristic =
+          await service.getCharacteristic(
+            SMOOTH_ENABLED_UUID
+          );
+
+        smoothIntervalCharacteristic =
+          await service.getCharacteristic(
+            SMOOTH_INTERVAL_UUID
+          );
+
+        // Enable notifications.
+        await armedCharacteristic.startNotifications();
+        await angleCharacteristic.startNotifications();
+
+        armedCharacteristic.addEventListener(
+          "characteristicvaluechanged",
+          handleArmedNotification
+        );
+
+        angleCharacteristic.addEventListener(
+          "characteristicvaluechanged",
+          handleAngleNotification
+        );
+
+        // Read current Nano settings.
+        const minimumValue =
+          await minimumCharacteristic.readValue();
+
+        const maximumValue =
+          await maximumCharacteristic.readValue();
+
+        const angleValue =
+          await angleCharacteristic.readValue();
+
+        const armedValue =
+          await armedCharacteristic.readValue();
+
+        const smoothEnabledValue =
+          await smoothEnabledCharacteristic.readValue();
+
+        const smoothIntervalValue =
+          await smoothIntervalCharacteristic.readValue();
+
+        const minimum =
+          readUint16(minimumValue);
+
+        const maximum =
+          readUint16(maximumValue);
+
+        const angle =
+          readUint16(angleValue);
+
+        const smoothEnabled =
+          smoothEnabledValue.getUint8(0) === 1;
+
+        const interval =
+          readUint16(smoothIntervalValue);
+
+        // Populate controls.
+        minimumInput.value = minimum;
+        maximumInput.value = maximum;
+
+        slider.min = minimum;
+        slider.max = maximum;
+        slider.value = angle;
+
+        angleDisplay.textContent = angle + "°";
+
+        smoothEnabledInput.checked = smoothEnabled;
+
+        if (interval <= 8) {
+          smoothSpeedSelect.value = "7";
+        } else if (interval <= 20) {
+          smoothSpeedSelect.value = "15";
+        } else {
+          smoothSpeedSelect.value = "30";
+        }
+
+        connected = true;
+        connectButton.textContent = "Connected";
+        setConnectedControls(true);
+
+        showArmedState(
+          armedValue.getUint8(0) === 1
+        );
+
+      } catch (error) {
+        message.textContent =
+          "Connection error: " + error.message;
+      }
+    }
+
+    // ========================================================
+    // Apply minimum and maximum
+    // ========================================================
+
+    async function applySetpoints() {
+      let minimum = Number(minimumInput.value);
+      let maximum = Number(maximumInput.value);
+
+      minimum = Math.round(minimum);
+      maximum = Math.round(maximum);
+
+      minimum = Math.max(
+        0,
+        Math.min(179, minimum)
+      );
+
+      maximum = Math.max(
+        1,
+        Math.min(180, maximum)
+      );
+
+      if (minimum >= maximum) {
+        message.textContent =
+          "Minimum angle must be less than maximum angle.";
+
+        return;
+      }
+
+      try {
+        // Send maximum first if reducing minimum/maximum could
+        // transiently make the Nano's existing limits invalid.
+        await writeUint16(
+          maximumCharacteristic,
+          maximum
+        );
+
+        await writeUint16(
+          minimumCharacteristic,
+          minimum
+        );
+
+        minimumInput.value = minimum;
+        maximumInput.value = maximum;
+
+        slider.min = minimum;
+        slider.max = maximum;
+
+        let currentAngle = Number(slider.value);
+
+        currentAngle = Math.max(
+          minimum,
+          Math.min(maximum, currentAngle)
+        );
+
+        slider.value = currentAngle;
+        angleDisplay.textContent =
+          currentAngle + "°";
+
+        // Send the resulting clamped slider position.
+        pendingAngle = currentAngle;
+        sendPendingAngle();
+
+        message.textContent =
+          "Setpoints applied: " +
+          minimum + "° to " +
+          maximum + "°.";
+
+      } catch (error) {
+        message.textContent =
+          "Setpoint error: " + error.message;
+      }
+    }
+
+    // ========================================================
+    // Slider write queue
+    // ========================================================
+
+    async function sendPendingAngle() {
+      if (
+        angleWriteInProgress ||
+        pendingAngle === null
+      ) {
+        return;
+      }
+
+      angleWriteInProgress = true;
+
+      const angleToSend = pendingAngle;
+      pendingAngle = null;
+
+      try {
+        await writeUint16(
+          angleCharacteristic,
+          angleToSend
+        );
+      } catch (error) {
+        message.textContent =
+          "Servo command error: " + error.message;
+      }
+
+      angleWriteInProgress = false;
+
+      // If the slider moved again while the previous BLE write
+      // was underway, send only the latest position.
+      if (pendingAngle !== null) {
+        sendPendingAngle();
+      }
+    }
+
+    // ========================================================
+    // Event handlers
+    // ========================================================
+
+    slider.addEventListener(
+      "input",
+      function () {
+        const angle = Number(slider.value);
+
+        angleDisplay.textContent = angle + "°";
+
+        // Always send the target. The Nano updates the matrix
+        // in either armed state and moves the servo only when
+        // armed.
+        pendingAngle = angle;
+        sendPendingAngle();
+      }
+    );
+
+    smoothEnabledInput.addEventListener(
+      "change",
+      async function () {
+        try {
+          const enabled =
+            smoothEnabledInput.checked ? 1 : 0;
+
+          await smoothEnabledCharacteristic.writeValue(
+            new Uint8Array([enabled])
+          );
+
+          smoothSpeedSelect.disabled =
+            !smoothEnabledInput.checked;
+
+          message.textContent =
+            smoothEnabledInput.checked
+              ? "Smooth servo movement enabled."
+              : "Direct servo movement enabled.";
+
+        } catch (error) {
+          message.textContent =
+            "Smooth setting error: " +
+            error.message;
+        }
+      }
+    );
+
+    smoothSpeedSelect.addEventListener(
+      "change",
+      async function () {
+        try {
+          const interval =
+            Number(smoothSpeedSelect.value);
+
+          await writeUint16(
+            smoothIntervalCharacteristic,
+            interval
+          );
+
+          message.textContent =
+            "Smooth movement speed updated.";
+
+        } catch (error) {
+          message.textContent =
+            "Speed setting error: " +
+            error.message;
+        }
+      }
+    );
+
+    connectButton.addEventListener(
+      "click",
+      connect
+    );
+
+    applyButton.addEventListener(
+      "click",
+      applySetpoints
+    );
+  </script>
+</body>
+</html>
